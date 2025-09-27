@@ -1,0 +1,31 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block content %}
+<div class="container py-5" style="background-color: #f8f9fa;">
+    <div class="row min-vh-100 align-items-center justify-content-center">
+        <div class="col-12 col-md-8 col-lg-6 text-center">
+            <div class="card shadow-lg p-5 bg-white">
+                <h3 class="fw-bold text-success mb-4">Reconhecimento Bem-Sucedido!</h3>
+                <p class="lead mb-4">Olá, **{{ user.name }}**!</p>
+
+                <div class="mb-4">
+                    {% if user.photo %}
+                        <img src="{{ user.photo.url }}" alt="Foto de Perfil de {{ user.name }}" class="rounded-circle shadow" style="width: 200px; height: 200px; object-fit: cover;">
+                    {% endif %}
+                </div>
+
+                <div class="card-body">
+                    {% if recognized_at %}
+                        <p class="text-muted">Reconhecido em {{ recognized_at|date:"d/m/Y" }} às {{ recognized_at|time:"H:i" }}.</p>
+                    {% endif %}
+                </div>
+
+                <a href="{% url 'face_recognition' %}" class="btn btn-primary btn-lg mt-4">Tentar Novamente</a>
+
+                <a href="{% url 'create_user' %}" class="btn btn-outline-secondary btn-lg mt-3">Voltar para o Cadastro</a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

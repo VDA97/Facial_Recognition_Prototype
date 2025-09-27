@@ -1,0 +1,112 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block content %}
+
+<div class="container-fluid py-5" style="background-color: #f8f9fa;">
+    <div class="row min-vh-100 align-items-center justify-content-center">
+        <div class="col-12 col-lg-6 d-flex flex-column align-items-center justify-content-center">
+
+            <div class="card shadow-lg p-5 bg-white w-100" style="max-width: 500px;">
+                <h1 class="text-center text-primary mb-4">Reconhecimento Facial</h1>
+                <p class="lead text-center text-muted">Aponte seu rosto para a câmera.</p>
+
+                <div class="embed-responsive embed-responsive-16by9 my-4 rounded shadow">
+                    <img id="camera-feed" src="{% url 'face_recognition_stream' %}"
+                         class="img-fluid rounded"
+                         alt="Transmissão de vídeo de reconhecimento facial">
+                </div>
+
+                <div class="alert alert-info text-center" id="status-message" role="alert">
+                    Aguardando reconhecimento...
+                </div>
+
+                <a href="{% url 'create_user' %}" class="btn btn-outline-secondary btn-lg mt-3" id="stop-and-return-button">Voltar para o Cadastro</a>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<script>
+    // URL de destino para o botão de parar/voltar
+    const returnUrl = "{% url 'create_user' %}";
+
+    // Adicione o token CSRF para requisições POST
+    const csrf_token = "{{ csrf_token }}";
+
+    // Função para parar o stream da câmera e redirecionar
+    function stopCameraAndRedirect() {
+        // 1. Para o loop de verificação de reconhecimento
+        clearInterval(checkRecognition);
+
+        // 2. Envia um sinal para o backend (Django View) para liberar a câmera
+        fetch('{% url "face_recognition_check" %}', {
+            method: 'POST', // Usa POST para ações que alteram o estado
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrf_token
+            },
+            body: JSON.stringify({ action: 'stop' })
+        }).catch(error => console.error('Erro ao enviar sinal de parada:', error));
+
+        // 3. Adiciona um pequeno atraso antes de redirecionar para dar tempo
+        // ao navegador de processar a requisição.
+        setTimeout(() => {
+            window.location.href = returnUrl;
+        }, 100); // 100ms de atraso
+    }
+
+    // Adiciona o evento de click ao novo botão
+    document.getElementById('stop-and-return-button').addEventListener('click', function(event) {
+        event.preventDefault(); // Impede o comportamento padrão do link
+        stopCameraAndRedirect();
+    });
+
+    // Código de verificação de reconhecimento
+    const checkRecognition = setInterval(() => {
+        fetch("{% url 'face_recognition_check' %}")
+            .then(response => response.json())
+            .then(data => {
+                const statusMessage = document.getElementById('status-message');
+
+                if (data.status === 'success') {
+                    // Reconhecimento bem-sucedido!
+                    clearInterval(checkRecognition);
+
+                    statusMessage.textContent = "Rosto reconhecido com sucesso! Redirecionando...";
+                    statusMessage.classList.remove('alert-info');
+                    statusMessage.classList.add('alert-success');
+
+                    const userId = data.user_id;
+
+                    // Captura a data e hora atual e adiciona à URL
+                    const recognizedAt = new Date().toISOString();
+                    const url = `{% url 'recognized_user' 0 %}`.replace('0', userId);
+                    window.location.href = `${url}?recognized_at=${recognizedAt}`;
+                } else {
+                    statusMessage.textContent = "Aguardando reconhecimento...";
+                    statusMessage.classList.remove('alert-success');
+                    statusMessage.classList.add('alert-info');
+                }
+            })
+            .catch(error => {
+                console.error('Erro na verificação de reconhecimento:', error);
+                const statusMessage = document.getElementById('status-message');
+                statusMessage.textContent = "Erro de conexão. Tentando novamente...";
+                statusMessage.classList.remove('alert-info');
+                statusMessage.classList.add('alert-danger');
+            });
+    }, 1000);
+
+    // O listener 'beforeunload' ainda é mantido para garantir que a câmera seja parada se o usuário fechar a aba
+    window.addEventListener('beforeunload', () => {
+        // Usa o fetch para enviar um sinal de parada
+        const payload = JSON.stringify({ action: 'stop' });
+        const headers = {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrf_token
+        };
+        fetch('{% url "face_recognition_check" %}', { method: 'POST', headers: headers, body: payload }).catch(() => {});
+    });
+</script>
+{% endblock %}
