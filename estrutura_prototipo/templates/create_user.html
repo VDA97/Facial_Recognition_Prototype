@@ -55,11 +55,36 @@
 
             <div class="w-100 mt-4 text-center" style="max-width: 500px;">
                 <hr>
+                <p class="text-muted mb-3">Após o cadastro de um novo usuário, treine o modelo!</p>
+                <button id="start-training-btn" class="btn btn-success btn-lg w-100">Iniciar Treinamento</button>
+                <hr>
                 <p class="text-muted mb-3">Já tem um rosto cadastrado? Clique para testar o reconhecimento.</p>
                 <a href="{% url 'face_recognition' %}" class="btn btn-primary btn-lg w-100">Testar Reconhecimento</a>
             </div>
         </div>
     </div>
 </div>
+
+<script>
+    document.getElementById('start-training-btn').addEventListener('click', function() {
+        // Envia a requisição POST para o Django
+        fetch('/start-training/', {
+            method: 'POST',
+            headers: {
+                // Necessário para a proteção CSRF do Django
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+        })
+        .then(response => response.json()) // Converte a resposta para JSON
+        .then(data => {
+            // Exibe a mensagem de sucesso ou erro retornada pela sua view
+            alert(data.message);
+        })
+        .catch(error => {
+            console.error('Erro:', error);
+            alert('Erro ao tentar iniciar o treinamento.');
+        });
+    });
+</script>
 
 {% endblock %}

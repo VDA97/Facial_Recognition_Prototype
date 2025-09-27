@@ -8,77 +8,118 @@ from reconhecimento_facial.models import User, TrainedModel
 class Command(BaseCommand):
     help = "Command to test facial recognition with a live camera display."
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.face_cascade = self._load_cascade()
+        self.recognizer = self._load_recognizer()
+        self.camera = None
+        self.font = cv2.FONT_HERSHEY_COMPLEX_SMALL
+        self.CONFIDENCE_THRESHOLD = 9000
+
     def handle(self, *args, **kwargs):
         self.recognize_faces()
 
-    def recognize_faces(self):
-        face_cascade = cv2.CascadeClassifier("haarcascade_frontalface_default.xml")
+    # --- Métodos de Inicialização ---
+
+    def _load_cascade(self):
+        """Carrega o classificador de detecção de rosto."""
+        # Note: 'haarcascade_frontalface_default.xml' deve estar no mesmo diretório ou acessível pelo path.
+        cascade = cv2.CascadeClassifier("haarcascade_frontalface_default.xml")
+        if cascade.empty():
+            self.stdout.write(self.style.ERROR(
+                "Erro: Não foi possível carregar o classificador 'haarcascade_frontalface_default.xml'"))
+            return None
+        return cascade
+
+    def _load_recognizer(self):
+        """Carrega o modelo de treinamento e o reconhecedor."""
         recognizer = cv2.face.EigenFaceRecognizer_create(num_components=100, threshold=8000)
+        try:
+            training = TrainedModel.objects.first()
+            if not training:
+                self.stdout.write(self.style.ERROR("Modelo de treinamento não encontrado no banco de dados."))
+                return None
 
-        # Load the training model
-        training = TrainedModel.objects.first()
-        if not training:
-            print("Modelo de treinamento não encontrado.")
+            model_path = os.path.join(settings.MEDIA_ROOT, training.model_file.name)
+            if not os.path.exists(model_path):
+                self.stdout.write(self.style.ERROR(f"Arquivo de modelo não encontrado: {model_path}"))
+                return None
+
+            recognizer.read(model_path)
+            self.stdout.write(self.style.SUCCESS(f"Modelo de treinamento carregado: {training.model_file.name}"))
+            return recognizer
+        except Exception as e:
+            self.stdout.write(self.style.ERROR(f"Erro ao carregar o modelo: {e}"))
+            return None
+
+    # --- Lógica Principal do Reconhecimento ---
+
+    def recognize_faces(self):
+        """Inicia a câmera e o loop de reconhecimento facial."""
+        if not self.face_cascade or not self.recognizer:
             return
 
-        model_path = os.path.join(settings.MEDIA_ROOT, training.model_file.name)
-        recognizer.read(model_path)
-
-        # Printa o nome do modelo carregado, como você pediu
-        print(f"Recognizer Modelo de treinamento carregado: {training.model_file.name}")
-
-        camera = cv2.VideoCapture(0)
-        if not camera.isOpened():
-            print("Não foi possível abrir a câmera.")
+        self.camera = cv2.VideoCapture(0)
+        if not self.camera.isOpened():
+            self.stdout.write(self.style.ERROR("Não foi possível abrir a câmera."))
             return
 
-        width, height = 220, 220
-        font = cv2.FONT_HERSHEY_COMPLEX_SMALL
-        print("Câmera aberta com sucesso. Pressione 'q' para sair.")
+        self.stdout.write(self.style.SUCCESS("Câmera aberta com sucesso. Pressione 'q' para sair."))
 
         while True:
-            ret, frame = camera.read()
+            ret, frame = self.camera.read()
             if not ret:
-                print("Erro ao acessar a câmera.")
+                self.stdout.write(self.style.ERROR("Erro ao acessar a câmera."))
                 break
 
-            frame = cv2.resize(frame, (480, 360))
-            gray_image = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-            detected_faces = face_cascade.detectMultiScale(
-                gray_image, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30), maxSize=(400, 400)
-            )
+            frame = self._process_frame(frame)
 
-            for (x, y, l, a) in detected_faces:
-                face_image = gray_image[y:y + a, x:x + l]
-                face_image = cv2.resize(face_image, (width, height))
-
-                # Apply the same pre-processing used in training
-                face_image = cv2.equalizeHist(face_image)
-                face_image = cv2.normalize(face_image, None, 0, 255, cv2.NORM_MINMAX)
-
-                cv2.rectangle(frame, (x, y), (x + l, y + a), (0, 255, 0), 2)
-                label, confidence = recognizer.predict(face_image)
-                print(f"O valor de confiança de reconhecimento é: {confidence}")
-
-                # Only show recognition if confidence is good
-                if confidence < 9000:  # adjust this value as needed
-                    try:
-                        user = User.objects.get(id=label)
-                        name = str(user.name).strip("(),'")
-                        conf_text = f"{name} ({int(confidence)})"
-                        cv2.putText(frame, conf_text, (x, y + a + 30), font, 1, (0, 255, 0), 2)
-                    except User.DoesNotExist:
-                        cv2.putText(frame, "Desconhecido", (x, y + a + 40), font, 1, (0, 0, 255), 2)
-                else:
-                    cv2.putText(frame, "Baixa confiança", (x, y + a + 30), font, 1, (0, 0, 255), 2)
-
-            frame = cv2.flip(frame, 1)
             cv2.imshow("Protótipo de Reconhecimento Facial", frame)
 
-            # Stop by pressing the 'q' key
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
 
-        camera.release()
+        self.camera.release()
         cv2.destroyAllWindows()
-        print('Câmera fechada.')
+        self.stdout.write(self.style.WARNING("Câmera fechada."))
+
+    def _process_frame(self, frame):
+        """Processa um único frame para detecção e reconhecimento de rosto."""
+        frame = cv2.resize(frame, (480, 360))
+        gray_image = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
+        detected_faces = self.face_cascade.detectMultiScale(
+            gray_image, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30), maxSize=(400, 400)
+        )
+
+        for (x, y, l, a) in detected_faces:
+            face_image = gray_image[y:y + a, x:x + l]
+            self._recognize_single_face(frame, face_image, x, y, l, a)
+
+        return cv2.flip(frame, 1)
+
+    def _recognize_single_face(self, frame, face_image, x, y, l, a):
+        """Reconhece e desenha a informação de um único rosto no frame."""
+        cv2.rectangle(frame, (x, y), (x + l, y + a), (0, 255, 0), 2)
+
+        face_image = cv2.resize(face_image, (220, 220))
+        face_image = cv2.equalizeHist(face_image)
+        face_image = cv2.normalize(face_image, None, 0, 255, cv2.NORM_MINMAX)
+
+        label, confidence = self.recognizer.predict(face_image)
+        self.stdout.write(f"Valor de confiança: {confidence}")
+
+        if confidence < self.CONFIDENCE_THRESHOLD:
+            try:
+                user = User.objects.get(id=label)
+                name = str(user.name).strip("(),'")
+                text = f"{name} ({int(confidence)})"
+                color = (0, 255, 0)  # Green
+            except User.DoesNotExist:
+                text = "Desconhecido"
+                color = (0, 0, 255)  # Red
+        else:
+            text = "Baixa confiança"
+            color = (0, 0, 255)  # Red
+
+        cv2.putText(frame, text, (x, y - 10), self.font, 1, color, 2)

@@ -100,6 +100,8 @@ class VideoCamera(object):
         if not success:
             return None
 
+        # Espelha a imagem para o usuário (experiência visual)
+        frame = cv2.flip(frame, 1)
         height, width, _ = frame.shape
         center_x, center_y = int(width / 2), int(height / 2)
         a, b = 140, 180
@@ -143,10 +145,8 @@ class VideoCamera(object):
         if not success:
             return None, None
 
-        # Flip for a mirror effect on the frontend
-        frame = cv2.flip(frame, 1)
+        # Processamento e detecção na imagem original (sem flip)
         gray_image = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-
         detected_faces = self.face_cascade.detectMultiScale(
             gray_image, **self._get_face_detection_params())
 
@@ -155,6 +155,9 @@ class VideoCamera(object):
             user_id = self._process_and_recognize_face(frame, gray_image, x, y, w, h)
             if user_id:
                 break
+
+        # Espelha o frame apenas para exibição no frontend (após o processamento)
+        frame = cv2.flip(frame, 1)
 
         return self._frame_to_bytes(frame), user_id
 

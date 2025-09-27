@@ -8,7 +8,8 @@ from .models import User, ProcessedPhotos
 from .camera import VideoCamera
 from datetime import datetime
 from django.utils import timezone
-import json # Importe o módulo json
+import json
+from reconhecimento_facial.management.commands.training import Command as TrainingCommand
 
 # Instance of the VideoCamera class
 camera = VideoCamera()
@@ -42,7 +43,7 @@ def gen_take_photos_stream(camera):
         if frame is None:
             break
         yield (b'--frame\r\n'
-               b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n\r\n')
+               b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\r')
     camera.stop_camera()
 
 
@@ -224,3 +225,24 @@ def recognized_user(request, user_id):
         'recognized_at': recognized_at,
     }
     return render(request, 'recognized_user.html', context)
+
+
+# A nova view para iniciar o treinamento foi inserida abaixo
+def start_training(request):
+    """
+    View que executa o comando de treinamento e recarrega o modelo na memória.
+    """
+    if request.method == 'POST':
+        try:
+            # 1. Executa o script de treinamento, que gera um novo arquivo de modelo
+            training_command = TrainingCommand()
+            training_command.handle()
+
+            # 2. Força a instância global da câmera a carregar o novo modelo
+            # O método _load_model() irá buscar o arquivo de modelo mais recente
+            camera._load_model()
+
+            return JsonResponse({'status': 'success', 'message': 'Treinamento iniciado e concluído com sucesso.'})
+        except Exception as e:
+            return JsonResponse({'status': 'error', 'message': f'Erro no treinamento: {str(e)}'})
+    return JsonResponse({'status': 'error', 'message': 'Método não permitido.'})

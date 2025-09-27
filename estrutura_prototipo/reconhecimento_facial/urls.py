@@ -6,7 +6,8 @@ from .views import (
     face_recognition,
     face_recognition_stream,
     face_recognition_check,
-    recognized_user
+    recognized_user,
+    start_training
 )
 
 urlpatterns = [
@@ -29,5 +30,8 @@ urlpatterns = [
     path('face_recognition_check/', face_recognition_check, name='face_recognition_check'),
 
     # URL que exibe a página de sucesso com os dados do usuário reconhecido
-    path('recognized_user/<int:user_id>/', recognized_user, name='recognized_user')
+    path('recognized_user/<int:user_id>/', recognized_user, name='recognized_user'),
+
+    # URL que para executar o código de treinamento
+    path('start-training/', start_training, name='start_training')
 ]

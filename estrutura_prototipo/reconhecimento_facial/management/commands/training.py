@@ -14,74 +14,84 @@ class Command(BaseCommand):
         self.train_faces()
 
     def train_faces(self):
-        self.stdout.write(self.style.WARNING("Starting training with the information base."))
-        print(f"OpenCV version: {cv2.__version__}")
+        """Método principal que orquestra todo o processo de treinamento."""
+        self.stdout.write(self.style.WARNING("Iniciando o treinamento com a base de dados."))
 
-        # Initialize the EigenFace classifier
-        eigen_face = cv2.face.EigenFaceRecognizer_create(num_components=100, threshold=8000)
+        # 1. Carrega e pré-processa as imagens
+        faces, labels = self._load_and_preprocess_images()
 
+        if not faces:
+            self.stdout.write(self.style.ERROR("Não há rostos para treinar. Encerrando."))
+            return
+
+        # 2. Treina o classificador
+        eigen_face = self._train_classifier(faces, labels)
+
+        # 3. Salva o modelo e limpa os arquivos temporários
+        self._save_and_clean_model(eigen_face)
+
+    def _load_and_preprocess_images(self):
+        """Carrega e pré-processa todas as imagens do banco de dados."""
         faces, labels = [], []
         error_count = 0
 
-        # Process each image in ProcessedPhotos
+        self.stdout.write(self.style.SUCCESS("Processando imagens..."))
+
         for photo in ProcessedPhotos.objects.all():
-            image_file = photo.image.url.replace('/media/roi/', '')
-            image_path = os.path.join(settings.MEDIA_ROOT, 'roi', image_file)
+            image_path = os.path.join(settings.MEDIA_ROOT, 'roi', photo.image.name)
 
             if not os.path.exists(image_path):
-                print(f"Path not found: {image_path}")
+                self.stdout.write(self.style.ERROR(f"Arquivo não encontrado: {image_path}"))
                 error_count += 1
                 continue
 
-            # Load and process the image
             image = cv2.imread(image_path)
             if image is None:
-                print(f"Error loading the image: {image_path}")
+                self.stdout.write(self.style.ERROR(f"Erro ao carregar a imagem: {image_path}"))
                 error_count += 1
                 continue
 
-            # Improved image pre-processing
-            face_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-            face_image = cv2.resize(face_image, (220, 220))
-
-            # Histogram equalization to improve contrast
-            face_image = cv2.equalizeHist(face_image)
-
-            # Image normalization
-            face_image = cv2.normalize(
-                face_image, None, 0, 255, cv2.NORM_MINMAX)
+            # Chama a função auxiliar para processar a imagem
+            face_image = self._preprocess_single_image(image)
 
             faces.append(face_image)
             labels.append(photo.user.id)
 
-        # If there are no faces, stop the training
-        if not faces:
-            print("No faces found for training.")
-            return
+        self.stdout.write(self.style.ERROR(f"Imagens com erro de carregamento: {error_count}"))
+        return faces, labels
 
-        # Perform the model training
+    def _preprocess_single_image(self, image):
+        """Aplica o pré-processamento de imagem para um único rosto."""
+        face_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        face_image = cv2.resize(face_image, (220, 220))
+        face_image = cv2.equalizeHist(face_image)
+        face_image = cv2.normalize(face_image, None, 0, 255, cv2.NORM_MINMAX)
+        return face_image
+
+    def _train_classifier(self, faces, labels):
+        """Cria e treina o classificador EigenFace com os dados fornecidos."""
+        self.stdout.write(self.style.SUCCESS("Iniciando o treinamento do modelo..."))
+
+        eigen_face = cv2.face.EigenFaceRecognizer_create(num_components=100, threshold=8000)
+        eigen_face.train(np.array(faces), np.array(labels))
+
+        self.stdout.write(self.style.SUCCESS(f"{len(faces)} imagens treinadas com sucesso."))
+        return eigen_face
+
+    def _save_and_clean_model(self, eigen_face):
+        """Salva o modelo treinado no banco de dados e limpa arquivos temporários."""
         try:
-            eigen_face.train(np.array(faces), np.array(labels))
-            print(f"{len(faces)} images trained successfully.")
-
-            # Save the trained model to a temporary file
             tmp_dir = "./tmp"
             os.makedirs(tmp_dir, exist_ok=True)
-
             model_filename = os.path.join(tmp_dir, "eigenClassifier.xml")
-
             eigen_face.write(model_filename)
 
-            # Save the model to the database
             with open(model_filename, 'rb') as f:
                 trained_model, created = TrainedModel.objects.get_or_create()
                 trained_model.model_file.save('eigenClassifier.yml', File(f))
 
-            # Remove the temporary file and display status messages
             os.remove(model_filename)
-            self.stdout.write(self.style.ERROR(
-                f"Images with loading errors: {error_count}"))
-            self.stdout.write(self.style.SUCCESS("TRAINING COMPLETED"))
+            self.stdout.write(self.style.SUCCESS("TREINAMENTO CONCLUÍDO"))
 
         except Exception as e:
-            print(f"Error during training: {e}")
+            self.stdout.write(self.style.ERROR(f"Erro ao salvar o modelo: {e}"))
