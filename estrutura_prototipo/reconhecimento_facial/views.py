@@ -14,7 +14,7 @@ from reconhecimento_facial.management.commands.training import Command as Traini
 # Instance of the VideoCamera class
 camera = VideoCamera()
 
-# 1. User Creation and Photo Collection
+# Step 2. User Creation and Photo Collection
 
 def create_user(request):
     """Creates a new user and redirects to the photo collection page."""
@@ -27,13 +27,13 @@ def create_user(request):
         form = UserForm()
     return render(request, 'create_user.html', {'form': form})
 
-
+# Step 3. Take photos, create and save samples
+# Retorna o streaming da câmera para a interface com o usuário
 def take_photos_stream(request):
     """View to display the video stream for taking photos."""
     return StreamingHttpResponse(gen_take_photos_stream(camera),
                                  content_type='multipart/x-mixed-replace; boundary=frame')
-
-
+# Gera o streaming da câmera para a interface com o usuário
 def gen_take_photos_stream(camera):
     """Generator for the video stream used during photo taking."""
     camera.start_camera()
@@ -45,8 +45,7 @@ def gen_take_photos_stream(camera):
         yield (b'--frame\r\n'
                b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\r')
     camera.stop_camera()
-
-
+# Controla o fluxo de tirar as fotos nas 3 posições
 def take_photos_manager(request, user_id):
     """View for the user's photo collection flow."""
     step = int(request.GET.get('step', 1))
@@ -76,14 +75,12 @@ def take_photos_manager(request, user_id):
         ).order_by('-id')[:30]
 
     return render(request, 'take_photos.html', context)
-
-
+# Retorna a imagem que instrui o usuário a posicionar o rosto
 def _get_instruction_image(step):
     """Returns the correct instruction image based on the current step."""
     image_map = {1: 'center.png', 2: 'right.png', 3: 'left.png'}
     return image_map.get(step, 'center.png')
-
-
+# Cria as amostrar e salva
 def _process_and_save_photos(context, user):
     """
     Function to manage the process of face extraction and saving.
@@ -104,8 +101,7 @@ def _process_and_save_photos(context, user):
         context['extraction_ok'] = True
 
     return context
-
-
+# Cria as amostras com base nas fotos
 def _process_to_create_samples(camera, user_id):
     """
     Function to create samples and return the file_path of the faces.
@@ -135,15 +131,13 @@ def _process_to_create_samples(camera, user_id):
 
     camera.stop_camera()
     return file_paths
-
-
+# Salva as amostras
 def _save_samples(file_paths, user):
     """Saves the processed photos to the database and deletes the temporary files."""
     for path in file_paths:
         processed_photo = ProcessedPhotos.objects.create(user=user)
         processed_photo.image.save(os.path.basename(path), open(path, 'rb'))
         os.remove(path)
-
 
 # 2. Face Recognition and User Display
 

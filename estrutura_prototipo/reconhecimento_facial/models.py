@@ -39,7 +39,6 @@ class ProcessedPhotos(models.Model):
                              on_delete=models.CASCADE, related_name='user_processed_photos')
     image = models.ImageField(upload_to=user_directory_path)
 
-
 class TrainedModel(models.Model):
     model_file = models.FileField(upload_to='training/')
 

@@ -3,6 +3,7 @@ certifi==2025.8.3
 charset-normalizer==3.4.2
 cmake==3.31.0.1
 Django==4.2.20
+djangorestframework==3.16.1
 idna==3.10
 numpy==1.24.4
 opencv-contrib-python==4.5.5.64
@@ -10,4 +11,5 @@ pillow==11.3.0
 requests==2.32.3
 sqlparse==0.5.3
 typing_extensions==4.12.2
+tzdata==2025.2
 urllib3==2.5.0

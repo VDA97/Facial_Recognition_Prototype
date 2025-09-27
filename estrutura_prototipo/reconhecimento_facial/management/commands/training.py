@@ -29,16 +29,15 @@ class Command(BaseCommand):
 
         # 3. Salva o modelo e limpa os arquivos temporários
         self._save_and_clean_model(eigen_face)
-
+# Carrega e pré-processa todas as amostras do banco de dados.
     def _load_and_preprocess_images(self):
-        """Carrega e pré-processa todas as imagens do banco de dados."""
         faces, labels = [], []
         error_count = 0
 
         self.stdout.write(self.style.SUCCESS("Processando imagens..."))
 
         for photo in ProcessedPhotos.objects.all():
-            image_path = os.path.join(settings.MEDIA_ROOT, 'roi', photo.image.name)
+            image_path = os.path.join(settings.MEDIA_ROOT, photo.image.name)
 
             if not os.path.exists(image_path):
                 self.stdout.write(self.style.ERROR(f"Arquivo não encontrado: {image_path}"))
@@ -59,9 +58,9 @@ class Command(BaseCommand):
 
         self.stdout.write(self.style.ERROR(f"Imagens com erro de carregamento: {error_count}"))
         return faces, labels
-
+# Aplica o pré-processamento para um unico rosto
     def _preprocess_single_image(self, image):
-        """Aplica o pré-processamento de imagem para um único rosto."""
+
         face_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         face_image = cv2.resize(face_image, (220, 220))
         face_image = cv2.equalizeHist(face_image)
@@ -91,7 +90,7 @@ class Command(BaseCommand):
                 trained_model.model_file.save('eigenClassifier.yml', File(f))
 
             os.remove(model_filename)
-            self.stdout.write(self.style.SUCCESS("TREINAMENTO CONCLUÍDO"))
+            self.stdout.write(self.style.SUCCESS("Treinamento realizado com sucesso!"))
 
         except Exception as e:
             self.stdout.write(self.style.ERROR(f"Erro ao salvar o modelo: {e}"))
