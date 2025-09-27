@@ -8,7 +8,7 @@
                 {% if step == 1 %}
                     Posicione o Rosto Desta Forma
                 {% elif step == 2 %}
-                    Posicione o rosto novamente conforme demonstrado ao lado.
+                    Posicione o rosto novamente conforme demonstrado.
                 {% elif step == 3 %}
                     Última posição. Centralize e tire as fotos finais!
                 {% else %}
@@ -23,14 +23,14 @@
         <div class="col-12 col-lg-7 mt-5 mt-lg-0">
             {% if not extraction_ok %}
             <div class="card p-3 bg-primary bg-opacity-10 border border-primary rounded mb-3 text-center">
-                Centralize seu rosto dentro dos limites em verde e depois clique em tirar fotos!
+                Centralize seu rosto dentro dos limites em verde e depois clique em "Tirar Fotos"!
             </div>
 
             <div class="text-center mb-3">
-                <img class="border rounded-5 img-fluid" id="webcam" src="{% url 'face_detection' %}" style="max-width: 100%; height: auto;">
+                <img class="border rounded-5 img-fluid" id="webcam" src="{% url 'take_photos_stream' %}" style="max-width: 100%; height: auto;">
             </div>
 
-            <form class="mt-3 text-center" method="GET" action="{% url 'take_photos' user.id %}">
+            <form class="mt-3 text-center" method="GET" action="{% url 'take_photos_manager' user.id %}">
                 <input type="hidden" name="step" value="{{ step }}">
                 <button class="btn btn-lg btn-primary" type="submit" onclick="document.getElementById('clicked').value='True';">
                     Tirar Fotos
@@ -56,7 +56,7 @@
             {% endcomment %}
             <div class="text-center mt-4">
                 {% if step < 3 %}
-                    <a href="{% url 'take_photos' user.id %}?extraction_ok=False&step={{ step|add:1 }}" class="btn btn-lg btn-success">
+                    <a href="{% url 'take_photos_manager' user.id %}?extraction_ok=False&step={{ step|add:1 }}" class="btn btn-lg btn-success">
                         CONTINUAR
                     </a>
                 {% else %}

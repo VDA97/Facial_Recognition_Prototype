@@ -12,3 +12,4 @@ class UserAdmin(admin.ModelAdmin):
 
 admin.site.register(User, UserAdmin)
 admin.site.register(TrainedModel)
+admin.site.register(ProcessedPhotos)

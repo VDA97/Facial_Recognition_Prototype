@@ -2,7 +2,7 @@ from django.db import models
 from django.core.exceptions import ValidationError
 from django.utils.text import slugify
 from random import randint
-
+import os
 
 class User(models.Model):
     photo = models.ImageField(upload_to='photos/')
@@ -20,11 +20,24 @@ class User(models.Model):
 
         super().save(*args, **kwargs)
 
+def user_directory_path(instance, filename):
+    # Use o campo 'name' da sua classe User
+    username = instance.user.name.replace(' ', '_').lower()
+
+    # Pega a extensão original do arquivo
+    ext = filename.split('.')[-1]
+
+    # Cria o novo nome do arquivo: username_timestamp.ext
+    # O timestamp é para evitar que dois uploads com o mesmo nome se sobreponham
+    new_filename = f'{username}_{instance.id}.{ext}'
+
+    # Retorna o caminho completo
+    return os.path.join('roi', new_filename)
 
 class ProcessedPhotos(models.Model):
     user = models.ForeignKey(User,
                              on_delete=models.CASCADE, related_name='user_processed_photos')
-    image = models.ImageField(upload_to='roi/')
+    image = models.ImageField(upload_to=user_directory_path)
 
 
 class TrainedModel(models.Model):

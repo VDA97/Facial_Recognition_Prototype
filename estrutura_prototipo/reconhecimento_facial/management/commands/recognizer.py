@@ -18,25 +18,28 @@ class Command(BaseCommand):
         # Load the training model
         training = TrainedModel.objects.first()
         if not training:
-            self.stdout.write(self.style.ERROR("Training model not found."))
+            print("Modelo de treinamento não encontrado.")
             return
 
         model_path = os.path.join(settings.MEDIA_ROOT, training.model_file.name)
         recognizer.read(model_path)
 
+        # Printa o nome do modelo carregado, como você pediu
+        print(f"Recognizer Modelo de treinamento carregado: {training.model_file.name}")
+
         camera = cv2.VideoCapture(0)
         if not camera.isOpened():
-            self.stdout.write(self.style.ERROR("Unable to open camera."))
+            print("Não foi possível abrir a câmera.")
             return
 
         width, height = 220, 220
         font = cv2.FONT_HERSHEY_COMPLEX_SMALL
-        self.stdout.write(self.style.SUCCESS("Camera opened successfully. Press 'q' to exit."))
+        print("Câmera aberta com sucesso. Pressione 'q' para sair.")
 
         while True:
             ret, frame = camera.read()
             if not ret:
-                self.stdout.write(self.style.ERROR("Error accessing the camera."))
+                print("Erro ao acessar a câmera.")
                 break
 
             frame = cv2.resize(frame, (480, 360))
@@ -55,7 +58,7 @@ class Command(BaseCommand):
 
                 cv2.rectangle(frame, (x, y), (x + l, y + a), (0, 255, 0), 2)
                 label, confidence = recognizer.predict(face_image)
-                print(f"The recognition confidence value is: {confidence}")
+                print(f"O valor de confiança de reconhecimento é: {confidence}")
 
                 # Only show recognition if confidence is good
                 if confidence < 9000:  # adjust this value as needed
@@ -65,12 +68,12 @@ class Command(BaseCommand):
                         conf_text = f"{name} ({int(confidence)})"
                         cv2.putText(frame, conf_text, (x, y + a + 30), font, 1, (0, 255, 0), 2)
                     except User.DoesNotExist:
-                        cv2.putText(frame, "Unknown", (x, y + a + 30), font, 1, (0, 0, 255), 2)
+                        cv2.putText(frame, "Desconhecido", (x, y + a + 40), font, 1, (0, 0, 255), 2)
                 else:
-                    cv2.putText(frame, "Low confidence", (x, y + a + 30), font, 1, (0, 0, 255), 2)
+                    cv2.putText(frame, "Baixa confiança", (x, y + a + 30), font, 1, (0, 0, 255), 2)
 
             frame = cv2.flip(frame, 1)
-            cv2.imshow("Facial Recognition Prototype", frame)
+            cv2.imshow("Protótipo de Reconhecimento Facial", frame)
 
             # Stop by pressing the 'q' key
             if cv2.waitKey(1) & 0xFF == ord('q'):
@@ -78,4 +81,4 @@ class Command(BaseCommand):
 
         camera.release()
         cv2.destroyAllWindows()
-        self.stdout.write(self.style.SUCCESS('Camera closed.'))
+        print('Câmera fechada.')

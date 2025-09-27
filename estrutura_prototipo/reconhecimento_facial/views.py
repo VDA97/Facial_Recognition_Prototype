@@ -3,35 +3,17 @@ import os
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.http import StreamingHttpResponse, JsonResponse
-from .forms import UserForm, ProcessedPhotosForm
+from .forms import UserForm
 from .models import User, ProcessedPhotos
 from .camera import VideoCamera
 from datetime import datetime
 from django.utils import timezone
+import json # Importe o módulo json
 
 # Instance of the VideoCamera class
 camera = VideoCamera()
 
-
-# --- Views for Face Detection and Photo Collection ---
-
-def gen_detect_face(camera):
-    """Generator for the facial detection streaming."""
-    camera.start_camera()
-    while camera.is_streaming:
-        frame = camera.detect_face()
-        if frame is None:
-            break
-        yield (b'--frame\r\n'
-               b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n\r\n')
-    camera.stop_camera()
-
-
-def face_detection(request):
-    """View to display the facial detection streaming."""
-    return StreamingHttpResponse(gen_detect_face(camera),
-                                 content_type='multipart/x-mixed-replace; boundary=frame')
-
+# 1. User Creation and Photo Collection
 
 def create_user(request):
     """Creates a new user and redirects to the photo collection page."""
@@ -39,15 +21,93 @@ def create_user(request):
         form = UserForm(request.POST, request.FILES)
         if form.is_valid():
             user = form.save()
-            return redirect(f'{reverse("take_photos", args=[user.id])}?step=1')
+            return redirect(f'{reverse("take_photos_manager", args=[user.id])}?step=1')
     else:
         form = UserForm()
     return render(request, 'create_user.html', {'form': form})
 
 
-def extract(camera, user_id):
+def take_photos_stream(request):
+    """View to display the video stream for taking photos."""
+    return StreamingHttpResponse(gen_take_photos_stream(camera),
+                                 content_type='multipart/x-mixed-replace; boundary=frame')
+
+
+def gen_take_photos_stream(camera):
+    """Generator for the video stream used during photo taking."""
+    camera.start_camera()
+    while camera.is_streaming:
+        # Usa o novo método para desenhar a área facial
+        frame = camera.draw_face_area()
+        if frame is None:
+            break
+        yield (b'--frame\r\n'
+               b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n\r\n')
+    camera.stop_camera()
+
+
+def take_photos_manager(request, user_id):
+    """View for the user's photo collection flow."""
+    step = int(request.GET.get('step', 1))
+    extraction_ok = request.GET.get('extraction_ok', 'False') == 'True'
+    instruction_image = _get_instruction_image(step)
+
+    try:
+        user = User.objects.get(id=user_id)
+    except User.DoesNotExist:
+        return redirect(reverse('create_user'))
+
+    if request.method == 'GET' and request.GET.get('clicked') == 'True':
+        print(f"Starting face extraction at step {step}...")
+        _process_and_save_photos({}, user)
+        return redirect(f'{reverse("take_photos_manager", args=[user.id])}?extraction_ok=True&step={step}')
+
+    context = {
+        'user': user,
+        'step': step,
+        'extraction_ok': extraction_ok,
+        'instruction_image': instruction_image,
+    }
+
+    if extraction_ok:
+        context['file_paths'] = ProcessedPhotos.objects.filter(
+            user=user
+        ).order_by('-id')[:30]
+
+    return render(request, 'take_photos.html', context)
+
+
+def _get_instruction_image(step):
+    """Returns the correct instruction image based on the current step."""
+    image_map = {1: 'center.png', 2: 'right.png', 3: 'left.png'}
+    return image_map.get(step, 'center.png')
+
+
+def _process_and_save_photos(context, user):
     """
-    Function to extract and return the file_path of the faces.
+    Function to manage the process of face extraction and saving.
+    """
+    num_photos = ProcessedPhotos.objects.filter(user__id=user.id).count()
+    print(num_photos)
+
+    if num_photos >= 90:
+        context['error'] = 'Maximum number of collections reached.'
+    else:
+        file_paths = _process_to_create_samples(camera, user.id)
+        print(file_paths)
+
+        _save_samples(file_paths, user)
+
+        context['file_paths'] = ProcessedPhotos.objects.filter(
+            user__id=user.id)
+        context['extraction_ok'] = True
+
+    return context
+
+
+def _process_to_create_samples(camera, user_id):
+    """
+    Function to create samples and return the file_path of the faces.
     """
     sample = 0
     number_of_samples = 30
@@ -56,7 +116,8 @@ def extract(camera, user_id):
 
     camera.start_camera()
     while sample < number_of_samples:
-        crop = camera.sample_faces()
+        # Usa o novo método para cortar o rosto
+        crop = camera.crop_face()
         if crop is not None:
             sample += 1
             face = cv2.resize(crop, (width, height))
@@ -75,64 +136,15 @@ def extract(camera, user_id):
     return file_paths
 
 
-def face_extract(context, user):
-    """
-    Function to manage the process of face extraction and saving.
-    """
-    num_photos = ProcessedPhotos.objects.filter(user__id=user.id).count()
-    print(num_photos)
-
-    if num_photos >= 90:
-        context['error'] = 'Maximum number of collections reached.'
-    else:
-        files_paths = extract(camera, user.id)
-        print(files_paths)
-
-        for path in files_paths:
-            processed_photo = ProcessedPhotos.objects.create(user=user)
-            processed_photo.image.save(os.path.basename(path), open(path, 'rb'))
-            os.remove(path)
-
-        context['file_paths'] = ProcessedPhotos.objects.filter(
-            user__id=user.id)
-        context['extraction_ok'] = True
-
-    return context
+def _save_samples(file_paths, user):
+    """Saves the processed photos to the database and deletes the temporary files."""
+    for path in file_paths:
+        processed_photo = ProcessedPhotos.objects.create(user=user)
+        processed_photo.image.save(os.path.basename(path), open(path, 'rb'))
+        os.remove(path)
 
 
-def take_photos(request, user_id):
-    """View for the user's photo collection flow."""
-    step = int(request.GET.get('step', 1))
-    extraction_ok = request.GET.get('extraction_ok', 'False') == 'True'
-    image_map = {1: 'center.png', 2: 'right.png', 3: 'left.png'}
-    instruction_image = image_map.get(step, 'center.png')
-
-    try:
-        user = User.objects.get(id=user_id)
-    except User.DoesNotExist:
-        return redirect(reverse('create_user'))
-
-    if request.method == 'GET' and request.GET.get('clicked') == 'True':
-        print(f"Starting face extraction at step {step}...")
-        face_extract({}, user)
-        return redirect(f'{reverse("take_photos", args=[user.id])}?extraction_ok=True&step={step}')
-
-    context = {
-        'user': user,
-        'step': step,
-        'extraction_ok': extraction_ok,
-        'instruction_image': instruction_image,
-    }
-
-    if extraction_ok:
-        context['file_paths'] = ProcessedPhotos.objects.filter(
-            user=user
-        ).order_by('-id')[:30]
-
-    return render(request, 'take_photos.html', context)
-
-
-# --- New Views for Recognition and Redirection ---
+# 2. Face Recognition and User Display
 
 def face_recognition(request):
     """
@@ -145,27 +157,39 @@ def face_recognition_stream(request):
     """
     View that returns the StreamingHttpResponse to the frontend.
     """
-
-    def gen_recognize_face_stream():
-        camera.start_camera()
-        while camera.is_streaming:
-            frame, _ = camera.recognize_face()
-            if frame is None:
-                break
-            yield (b'--frame\r\n'
-                   b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n\r\n')
-        camera.stop_camera()
-
-    return StreamingHttpResponse(gen_recognize_face_stream(),
+    return StreamingHttpResponse(gen_recognize_face_stream(camera),
                                  content_type='multipart/x-mixed-replace; boundary=frame')
+
+
+def gen_recognize_face_stream(camera):
+    """Generator for the video stream used during face recognition."""
+    camera.start_camera()
+    while camera.is_streaming:
+        frame, _ = camera.recognize_face()
+        if frame is None:
+            break
+        yield (b'--frame\r\n'
+               b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n\r\n')
+    camera.stop_camera()
 
 
 def face_recognition_check(request):
     """
     View called via AJAX to check if a face has been recognized.
+    It handles both GET (checking) and POST (stopping) requests.
     """
-    frame, user_id = camera.recognize_face()
+    if request.method == 'POST':
+        try:
+            # Parse the JSON body from the POST request
+            data = json.loads(request.body)
+            if data.get('action') == 'stop':
+                camera.stop_camera()
+                return JsonResponse({'status': 'stopped'})
+        except json.JSONDecodeError:
+            pass # Continue to the GET logic if JSON is invalid
 
+    # GET request logic remains the same
+    _, user_id = camera.recognize_face()
     if user_id:
         camera.stop_camera()
         return JsonResponse({

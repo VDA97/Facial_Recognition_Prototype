@@ -1,8 +1,8 @@
 from django.urls import path
 from .views import (
     create_user,
-    take_photos,
-    face_detection,
+    take_photos_manager,
+    take_photos_stream,
     face_recognition,
     face_recognition_stream,
     face_recognition_check,
@@ -10,25 +10,24 @@ from .views import (
 )
 
 urlpatterns = [
-    # Main URL for creating a new user
+    # URL principal para criar um novo usuário
     path('', create_user, name='create_user'),
 
-    # URL for photo collection (3-step flow)
-    path('take_photos/<int:user_id>/', take_photos, name='take_photos'),
+    # URL para o gerenciamento do fluxo de coleta de fotos
+    path('take_photos/<int:user_id>/', take_photos_manager, name='take_photos_manager'),
 
-    # URL for face detection streaming (without recognition)
-    path('face_detection/', face_detection, name='face_detection'),
+    # URL para o streaming de vídeo durante a coleta de fotos
+    path('take_photos_stream/', take_photos_stream, name='take_photos_stream'),
 
-    # Main URL for face recognition (renders the template)
+    # URL principal para o reconhecimento facial (renderiza o template)
     path('face_recognition/', face_recognition, name='face_recognition'),
 
-    # New URLs for the recognition flow
-    # This URL provides the video stream for the <img> tag in the template
+    # URL para o streaming de vídeo do reconhecimento facial
     path('face_recognition_stream/', face_recognition_stream, name='face_recognition_stream'),
 
-    # This URL is called via JavaScript to check the recognition status
+    # URL chamada via JavaScript para verificar o status do reconhecimento
     path('face_recognition_check/', face_recognition_check, name='face_recognition_check'),
 
-    # This URL displays the success page with the recognized user's data
+    # URL que exibe a página de sucesso com os dados do usuário reconhecido
     path('recognized_user/<int:user_id>/', recognized_user, name='recognized_user')
 ]
